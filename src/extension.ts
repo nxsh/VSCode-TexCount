@@ -1,66 +1,52 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the necessary extensibility types to use in your code below
+import * as vscode from 'vscode';
 import { exec, execSync } from 'child_process';
-import G = require('glob');
-import { fileURLToPath } from 'url';
-import {workspace, window, commands, Disposable, ExtensionContext, StatusBarAlignment, StatusBarItem, TextDocument} from 'vscode';
 
-// This method is called when your extension is activated. Activation is
-// controlled by the activation events defined in package.json.
-export function activate(context: ExtensionContext) {
+let myStatusBarItem: vscode.StatusBarItem;
 
-    // Use the console to output diagnostic information (console.log) and errors (console.error).
-    // This line of code will only be executed once when your extension is activated.
-    console.log('VSCode TexCount Started!');
+export function activate({ subscriptions}: vscode.ExtensionContext) {
+	// register a command that is invoked when the status bar
+	// item is selected
+	const myCommandId = 'texcount.showBriefOutput';
+	subscriptions.push(vscode.commands.registerCommand(myCommandId, () => {
+		//const n = getNumberOfWords(vscode.window.activeTextEditor);
+		const n = getBriefOutput(vscode.window.activeTextEditor);
+		vscode.window.showInformationMessage(`Words in text: ${n[0]}, Words in header: ${n[1]}`);
+	}));
+	// create a new status bar item that we can now manage
+	myStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	myStatusBarItem.command = myCommandId;
+	subscriptions.push(myStatusBarItem);
 
-    // create a new word counter
-    let wordCounter = new WordCounter();
-    let controller = new WordCounterController(wordCounter); 
+	// register some listener that make sure the status bar 
+	// item always up-to-date
+	subscriptions.push(vscode.window.onDidChangeActiveTextEditor(updateStatusBarItem));
+    subscriptions.push(vscode.workspace.onDidSaveTextDocument(updateStatusBarItem));
 
-    // Add to a list of disposables which are disposed when this extension is deactivated.
-    context.subscriptions.push(controller);
-    context.subscriptions.push(wordCounter);
+	// update status bar item once at start
+	updateStatusBarItem();	
 }
 
-class WordCounter {
+function updateStatusBarItem(): void {
+	const n = getNumberOfWords(vscode.window.activeTextEditor);
+	if (n > 0 && vscode.window.activeTextEditor?.document.languageId === "latex") {
+		myStatusBarItem.text = `$(pencil) ${n} words`;
+		myStatusBarItem.show();
+	}  
+	else if (n == 0 && vscode.window.activeTextEditor?.document.languageId === "latex") {
+		myStatusBarItem.text = `$(pencil) ${n} words`;
+		myStatusBarItem.show();
+	}
+	else {
+		myStatusBarItem.hide();
+	}
+}
 
-    private _statusBarItem!: StatusBarItem;
-
-    public updateWordCount() {
-
-        // Create as needed 
-        if (!this._statusBarItem) { 
-            this._statusBarItem = window.createStatusBarItem(StatusBarAlignment.Left); 
-        }  
-
-        // Get the current text editor 
-        let editor = window.activeTextEditor; 
-        if (!editor) { 
-            this._statusBarItem.hide(); 
-            return; 
-        } 
-
-         let doc = editor.document; 
-		 console.log(doc)
-
-        // Only update status if an LaTeX file 
-        if (doc.languageId === "latex") { 
-            let wordCount = this._getWordCount(doc); 
-
-            // Update the status bar 
-            this._statusBarItem.text = wordCount !== 1 ? `$(pencil) ${wordCount} Words` : '$(pencil) 1 Word'; 
-            this._statusBarItem.show(); 
-        } else { 
-            this._statusBarItem.hide(); 
-        } 
-    } 
-
-    public _getWordCount(doc: TextDocument): Number { 
-
-		let ss = 'texcount -brief ' + doc.fileName;
+function getNumberOfWords(editor: vscode.TextEditor | undefined): number {
+        let doc = editor!.document
+        let cmdOutputBrief = 'texcount -brief ' + doc.fileName;
 
         // Store output of texcount to a string
-        let texOut = execSync(ss).toString()
+        let texOut = execSync(cmdOutputBrief).toString()
 
         // Split the string into array elements
         const countArr = texOut.split("+")
@@ -71,41 +57,18 @@ class WordCounter {
         // Second value is the header word count
         const hwords = Number(countArr[1])
         
-        return cwords+hwords 
-
-    } 
-
-    dispose() {
-        this._statusBarItem.dispose();
-    }
+        return cwords + hwords
 }
 
-class WordCounterController {
+function getBriefOutput(editor: vscode.TextEditor | undefined): any {
+        let doc = editor!.document
+        let cmdOutputBrief = 'texcount -brief ' + doc.fileName;
 
-    private _wordCounter: WordCounter;
-    private _disposable: Disposable;
+        // Store output of texcount to a string
+        let texOut = execSync(cmdOutputBrief).toString()
 
-    constructor(wordCounter: WordCounter) {
-        this._wordCounter = wordCounter;
-        this._wordCounter.updateWordCount();
-
-        // subscribe to selection change and editor activation events
-        let subscriptions: Disposable[] = [];
+        // Split the string into array elements
+        const countArr = texOut.split("+")
         
-        workspace.onDidSaveTextDocument(this._onEvent, this, subscriptions);
-        // update the counter for the current file
-        this._wordCounter.updateWordCount();
-
-        // create a combined disposable from event subscriptions
-        this._disposable = Disposable.from(...subscriptions);
-    }
-
-    dispose() {
-        this._disposable.dispose();
-    }
-
-    private _onEvent() {
-        this._wordCounter.updateWordCount();
-    }
+        return countArr
 }
-
