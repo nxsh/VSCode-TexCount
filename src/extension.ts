@@ -8,9 +8,10 @@ export function activate({ subscriptions}: vscode.ExtensionContext) {
 	// item is selected
 	const myCommandId = 'texcount.showBriefOutput';
 	subscriptions.push(vscode.commands.registerCommand(myCommandId, () => {
-		//const n = getNumberOfWords(vscode.window.activeTextEditor);
-		const n = getBriefOutput(vscode.window.activeTextEditor);
-		vscode.window.showInformationMessage(`Words in text: ${n[0]}, Words in header: ${n[1]}`);
+		const n = getNumberOfWords(vscode.window.activeTextEditor);
+		//n[2] = n[2].replace( /[^\d].*/, '' );
+		vscode.window.showInformationMessage(`Body: ${n[0]}, Header: ${n[1]}`);
+		//vscode.window.showInformationMessage(`Body: ${n[0]}, Header: ${n[1]}, Outside: ${n[2]}`);
 	}));
 	// create a new status bar item that we can now manage
 	myStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -28,12 +29,13 @@ export function activate({ subscriptions}: vscode.ExtensionContext) {
 
 function updateStatusBarItem(): void {
 	const n = getNumberOfWords(vscode.window.activeTextEditor);
-	if (n > 0 && vscode.window.activeTextEditor?.document.languageId === "latex") {
-		myStatusBarItem.text = `$(pencil) ${n} words`;
+	const t = n.reduce((a, b) => a + b, 0)
+	if (t > 0 && vscode.window.activeTextEditor?.document.languageId === "latex") {
+		myStatusBarItem.text = `$(pencil) ${t} words`;
 		myStatusBarItem.show();
 	}  
-	else if (n == 0 && vscode.window.activeTextEditor?.document.languageId === "latex") {
-		myStatusBarItem.text = `$(pencil) ${n} words`;
+	else if (t == 0 && vscode.window.activeTextEditor?.document.languageId === "latex") {
+		myStatusBarItem.text = `$(pencil) ${t} words`;
 		myStatusBarItem.show();
 	}
 	else {
@@ -41,34 +43,39 @@ function updateStatusBarItem(): void {
 	}
 }
 
-function getNumberOfWords(editor: vscode.TextEditor | undefined): number {
+function getNumberOfWords(editor: vscode.TextEditor | undefined): number[] {
         let doc = editor!.document
-        let cmdOutputBrief = 'texcount -brief ' + doc.fileName;
+		let fn = doc.fileName.replace(/ /g, "\\ ")
+		//let dirArr = doc.fileName.split("/")
+		//let dir = fn.replace(dirArr[dirArr.length-1], "")
 
+        //let cmdOutputBrief = 'texcount -brief -inc -dir=' + dir + " " +fn;
+
+        let cmdOutputBrief = 'texcount -brief ' +fn;
         // Store output of texcount to a string
         let texOut = execSync(cmdOutputBrief).toString()
+		//console.log(texOut)
 
         // Split the string into array elements
         const countArr = texOut.split("+")
+        //const countArr = texOut.split("\n") // split by line without -brief flag
+		//console.log(countArr)
+      
+		// 	OUTPUT OF A TEXCOUNT IS DIFFERENT IF THERE IS MORE THAN ONE TEX FILE IN PROJECT 
+		//let totalLine = countArr[countArr.length-3].toString()
+		//let totalVals = totalLine.split("+")
+		//console.log(totalVals)
         
-        // First value is the body word count 
+		// First value is the body word count 
+        //const cwords = Number(totalVals[0])
         const cwords = Number(countArr[0])
-
-        // Second value is the header word count
+        
+		// Second value is the header word count
+        //const hwords = Number(totalVals[1])
         const hwords = Number(countArr[1])
-        
-        return cwords + hwords
-}
+		
+		//const owords = Number(totalVals[2].replace(/(^\d+)(.+$)/i,'$1'));
 
-function getBriefOutput(editor: vscode.TextEditor | undefined): any {
-        let doc = editor!.document
-        let cmdOutputBrief = 'texcount -brief ' + doc.fileName;
-
-        // Store output of texcount to a string
-        let texOut = execSync(cmdOutputBrief).toString()
-
-        // Split the string into array elements
-        const countArr = texOut.split("+")
-        
-        return countArr
+		//const total = [cwords,hwords,owords]
+        return [cwords, hwords]
 }
